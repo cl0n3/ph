@@ -3,7 +3,9 @@
 # 2015-07-03
 # TCS3200.py
 # Public Domain
-
+import signal
+import traceback
+import csv
 import time
 import threading
 import math
@@ -42,7 +44,7 @@ class sensor(threading.Thread):
    
    pi, 24, 22, 23, 4, 17, 18)
    """
-    def __init__(self, pi, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
+    def __init__(self, pi, datfile, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
         """
       The gpios connected to the sensor OUT, S2, and S3 pins must
       be specified.  The S0, S1 (frequency) and OE (output enable)
@@ -50,22 +52,11 @@ class sensor(threading.Thread):
       """
         threading.Thread.__init__(self)
         self._pi = pi
-        self.ref_data = {
-            "1": [4157, 1779, 2628],
-            "2": [5520, 2214, 2766],
-            "3": [6484, 2640, 2958],
-            "4": [6899, 3451, 3617],
-            "5": [7475, 4446, 3344],
-            "6": [8034, 5400, 3670],
-            "7": [6062, 4630, 3314],
-            "8": [4718, 4130, 3975],
-            "9": [3483, 3835, 2603],
-            "10": [2055, 1808, 2173],
-            "NoTestStrip": [9621, 10023, 12000],
-            "OutOfRange": [18419, 18237, 21802],
-            "DrawerNotClosed": [899, 909, 1094],
-            "NoDrawer": [7901, 8289, 9859],
-        }
+        self.ref_data = {}
+        with open(datfile) as csvfile:
+            for row in csv.reader(csvfile):
+                self.ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
+        print("loaded {} refdata rows from {}".format(len(self.ref_data), datfile))
     
         self._OUT = OUT
         self._S2 = S2
@@ -429,6 +420,15 @@ class sensor(threading.Thread):
             else:
                 time.sleep(0.1)
 
+class GracefulKiller:
+    kill_now = False
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signum, frame):
+        self.kill_now = True
+
 if __name__ == "__main__":
 
     RED=26
@@ -442,16 +442,21 @@ if __name__ == "__main__":
             input(str)
 
     pi = pigpio.pi()
+    # get data file
+    filename =  sys.argv[1] if len(sys.argv) == 2 else "data.csv"
 
-    s = sensor(pi)
+    s = sensor(pi, filename)
     s.set_frequency(2) # 20%
 
     interval = 2
 
     s.set_update_interval(interval)
+
+    killer = GracefulKiller()
+    
     
     try: 
-        while True:
+        while not killer.kill_now:
             
 #            active = pi.read(5) == 0
             active = pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
@@ -473,7 +478,8 @@ if __name__ == "__main__":
                 print(s.get_hertz())
                 subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph}.MP3"]) 
             
-    except:
+    except Exception as e:
 
-        print("cancelling")
+        print("cancelling", e)
+        traceback.print_exception(*sys.exc_info())
         s.cancel()
