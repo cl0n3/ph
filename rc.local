@@ -19,6 +19,6 @@ fi
 
 sudo pigpiod
 
-su pi -c 'python3.7 /home/pi/Projects/ph_sensor.py > /home/pi/logs/ph_sensor.log2>&1 &'
+#su pi -c 'python3.7 /home/pi/Projects/ph_sensor.py > /home/pi/logs/ph_sensor.log2>&1 &'
 
 exit 0

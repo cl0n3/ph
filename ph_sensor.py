@@ -437,16 +437,9 @@ if __name__ == "__main__":
     GREEN=20
     BLUE=16
 
-    def wait_for_return(str):
-        if sys.hexversion < 0x03000000:
-            raw_input(str)
-        else:
-            input(str)
-
     pi = pigpio.pi()
     # get data file
     filename =  sys.argv[1] if len(sys.argv) == 2 else "data.csv"
-
     
     s = sensor(pi, filename)
     s.set_frequency(2) # 20%
@@ -460,11 +453,9 @@ if __name__ == "__main__":
 
     killer = GracefulKiller()
     
-    
     try: 
         while not killer.kill_now:
             
-#            active = pi.read(5) == 0
             active = pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
             
             if active:
