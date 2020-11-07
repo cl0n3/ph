@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-
-# 2015-07-03
-# TCS3200.py
-# Public Domain
 import signal
 import traceback
 import csv
@@ -10,14 +5,8 @@ import time
 import threading
 import math
 import pigpio
-import TCS3200
 import sys
 import subprocess
-pi=pigpio.pi()
-pi.set_mode(21,pigpio.OUTPUT)
-pi.write(21,1)
-time.sleep(2)
-pi.write(21,0)
 
 class sensor(threading.Thread):
     """
@@ -77,6 +66,9 @@ class sensor(threading.Thread):
         self._S0 = S0
         self._S1 = S1
         self._OE = OE
+
+        # configure the chime pin for output.
+        pi.set_mode(21,pigpio.OUTPUT)
 
         if (S0 is not None) and (S1 is not None):
             
@@ -304,6 +296,16 @@ class sensor(threading.Thread):
       """
         self._read = True
 
+    def long_chime(self):
+        self._pi.write(21,1)
+        time.sleep(2)
+        self._pi.write(21,0)
+
+    def short_chime(self):
+        self._pi.write(21,1)
+        time.sleep(0.5)
+        self._pi.write(21,0)
+
     def _set_filter(self, f):
         """
       Set the colour to be sampled.
@@ -445,8 +447,12 @@ if __name__ == "__main__":
     # get data file
     filename =  sys.argv[1] if len(sys.argv) == 2 else "data.csv"
 
+    
     s = sensor(pi, filename)
     s.set_frequency(2) # 20%
+
+    # make the start up beep    
+    s.long_chime()
 
     interval = 2
 
@@ -462,9 +468,7 @@ if __name__ == "__main__":
             active = pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
             
             if active:
-                pi.write(21,1)
-                time.sleep(0.5)
-                pi.write(21,0)
+                s.short_chime()
                 
                 rgb = s.get_rgb()
                 hertz = s.get_hertz()
