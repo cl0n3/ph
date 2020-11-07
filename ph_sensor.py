@@ -86,7 +86,7 @@ class sensor(threading.Thread):
 
         self.set_update_interval(1.0) # One reading per second.
 
-        self.set_frequency(1) # 2%
+        self.set_frequency(2) # 1 2%, 2 20%
 
         self._set_filter(3) # Clear.
 
@@ -422,6 +422,9 @@ class sensor(threading.Thread):
             else:
                 time.sleep(0.1)
 
+    def wait_for_button(self):
+        return pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
+
 class GracefulKiller:
     kill_now = False
     def __init__(self):
@@ -433,43 +436,23 @@ class GracefulKiller:
 
 if __name__ == "__main__":
 
-    RED=26
-    GREEN=20
-    BLUE=16
-
     pi = pigpio.pi()
     # get data file
     filename =  sys.argv[1] if len(sys.argv) == 2 else "data.csv"
     
     s = sensor(pi, filename)
-    s.set_frequency(2) # 20%
-
-    # make the start up beep    
     s.long_chime()
-
-    interval = 2
-
-    s.set_update_interval(interval)
 
     killer = GracefulKiller()
     
     try: 
         while not killer.kill_now:
             
-            active = pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
-            
-            if active:
+            if s.wait_for_button():
                 s.short_chime()
                 
-                rgb = s.get_rgb()
-                hertz = s.get_hertz()
                 ph = s.get_pH()
-                print (ph)
-                
-                pi.set_PWM_dutycycle(RED, rgb[0])
-                pi.set_PWM_dutycycle(GREEN, rgb[1])
-                pi.set_PWM_dutycycle(BLUE, rgb[2])
-
+                print(ph)
                 print(s.get_hertz())
                 subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph}.MP3"]) 
             
