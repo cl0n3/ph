@@ -45,6 +45,7 @@ class Sensor(threading.Thread):
       gpios are optional.
       """
         threading.Thread.__init__(self)
+        self.reading = False
         self._pi = pi
         self._OUT = OUT
         self._S2 = S2
@@ -52,7 +53,7 @@ class Sensor(threading.Thread):
 
         pi.set_mode(BTN_N, pigpio.INPUT)
         pi.set_pull_up_down(BTN_N, pigpio.PUD_UP)
-        pi.callback(BTN_N, pigpio.EITHER_EDGE, self.narrow_read)
+        pi.callback(BTN_N, pigpio.RISING_EDGE, self.narrow_read)
 
         self._mode_OUT = pi.get_mode(OUT)
         self._mode_S2 = pi.get_mode(S2)
@@ -60,7 +61,7 @@ class Sensor(threading.Thread):
 
         pi.set_mode(BTN_W, pigpio.INPUT)
         pi.set_pull_up_down(BTN_W, pigpio.PUD_UP)
-        pi.callback(BTN_W, pigpio.EITHER_EDGE, self.wide_read)
+        pi.callback(BTN_W, pigpio.RISING_EDGE, self.wide_read)
 
         pi.write(OUT, 0)  # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
@@ -148,39 +149,39 @@ class Sensor(threading.Thread):
     def get_ph(self, file):
         if not self.reading:
             self.reading = True
-        self.short_chime()
+            time.sleep(0.3)
+            self.short_chime()
 
-        ref_data = {}
-        with open(file) as csvfile:
-            for row in csv.reader(csvfile):
-                ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-        print("loaded {} refdata rows from {}".format(len(ref_data), file))
+            ref_data = {}
+            with open(file) as csvfile:
+                for row in csv.reader(csvfile):
+                    ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
+            print("loaded {} refdata rows from {}".format(len(ref_data), file))
 
-        sample = self.get_hertz()
+            sample = self.get_hertz()
 
-        if sample is None or not sample or all(v == 0 for v in sample):
-            return 0
+            if sample is None or not sample or all(v == 0 for v in sample):
+                return 0
 
-        min_angle = 360
-        ph_found = None
-        for pH, v in ref_data.items():
-            # print (f"PH{pH}, v{v}")
-            dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
-            v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
-            s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
-            cos_theta = dotproduct / (v_length * s_length)
-            #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
+            min_angle = 360
+            ph_found = None
+            for pH, v in ref_data.items():
+                # print (f"PH{pH}, v{v}")
+                dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
+                v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+                s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
+                cos_theta = dotproduct / (v_length * s_length)
+                #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
 
-            theta = math.acos(cos_theta)
+                theta = math.acos(cos_theta)
 
-            if theta < min_angle:
-                min_angle = theta
-                ph_found = pH
+                if theta < min_angle:
+                    min_angle = theta
+                    ph_found = pH
 
-        print(ph_found)
-        print(sample)
-        subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
-        self.reading = False
+            print(ph_found)
+            print(sample)
+            subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
 
     def get_rgb(self, top=255):
         """
@@ -483,7 +484,9 @@ if __name__ == "__main__":
 
     try:
         while not killer.kill_now:
-            time.sleep(1)
+            time.sleep(5)
+            s.reading = False
+
 
 
     except Exception as e:
