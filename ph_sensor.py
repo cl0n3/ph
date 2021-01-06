@@ -114,6 +114,7 @@ class Sensor(threading.Thread):
         self.daemon = True
 
         self.start()
+        print("initialised")
 
     def cancel(self):
         """
@@ -142,17 +143,22 @@ class Sensor(threading.Thread):
         self._running = False
 
     def narrow_read(self, gpio, level, tick):
+        print("narrow read button press, reading={}".format(self.reading))
         if not self.reading:
             self.reading = True
             self.short_chime()
             self.get_ph(HOME + "/narrow_data.csv")
 
+        return None
+
     def wide_read(self, gpio, level, tick):
+        print("wide read button press, reading={}".format(self.reading))
         if not self.reading:
             self.reading = True
-            self.short_chime()
-            self.short_chime()
+            self.short_double_chime()
             self.get_ph(HOME + "/wide_data.csv")
+
+        return None
 
     def get_ph(self, file):
         ref_data = {}
@@ -326,21 +332,21 @@ class Sensor(threading.Thread):
 
     def long_chime(self):  # Boot up signal
         self._pi.write(21, 1)
-        time.sleep(2)
+        time.sleep(1)
         self._pi.write(21, 0)
 
     def short_chime(self):  # Test narrow range
         self._pi.write(21, 1)
-        time.sleep(0.5)
+        time.sleep(0.2)
         self._pi.write(21, 0)
 
     def short_double_chime(self):  # Test wide range
         self._pi.write(21, 1)
-        time.sleep(1)
+        time.sleep(0.2)
         self._pi.write(21, 0)
-        time.sleep(1)
+        time.sleep(0.4)
         self._pi.write(21, 1)
-        time.sleep(1)
+        time.sleep(0.2)
         self._pi.write(21, 0)
 
     def _set_filter(self, f):
@@ -487,7 +493,7 @@ if __name__ == "__main__":
 
     try:
         while not killer.kill_now:
-            time.sleep(5)
+            time.sleep(10)
             s.reading = False
 
 
