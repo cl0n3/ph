@@ -8,7 +8,11 @@ import pigpio
 import sys
 import subprocess
 
-class sensor(threading.Thread):
+BTN_N = 5
+BTN_W = 6
+
+
+class Sensor(threading.Thread):
     """
    This class reads RGB values from a TCS3200 colour sensor.
 
@@ -33,7 +37,8 @@ class sensor(threading.Thread):
    
    pi, 24, 22, 23, 4, 17, 18)
    """
-    def __init__(self, pi, datfile, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
+
+    def __init__(self, pi, narrow_data, wide_data, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
         """
       The gpios connected to the sensor OUT, S2, and S3 pins must
       be specified.  The S0, S1 (frequency) and OE (output enable)
@@ -41,29 +46,23 @@ class sensor(threading.Thread):
       """
         threading.Thread.__init__(self)
         self._pi = pi
-        self.ref_data = {}
-        with open(datfile) as csvfile:
-            for row in csv.reader(csvfile):
-                self.ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-        print("loaded {} refdata rows from {}".format(len(self.ref_data), datfile))
-    
         self._OUT = OUT
         self._S2 = S2
         self._S3 = S3
-        
-        But1 = 5 #Narrow range pH test
-        pi.set_mode(But1,pigpio.INPUT)
-        pi.set_pull_up_down(But1, pigpio.PUD_UP)
+
+        pi.set_mode(BTN_N, pigpio.INPUT)
+        pi.set_pull_up_down(BTN_N, pigpio.PUD_UP)
+        pi.callback(BTN_N, pigpio.EITHER_EDGE, self.narrow_read)
 
         self._mode_OUT = pi.get_mode(OUT)
         self._mode_S2 = pi.get_mode(S2)
         self._mode_S3 = pi.get_mode(S3)
-        
-        But2 = 6 #Broad range pH test
-        pi.set_mode(But2,pigpio.INPUT)
-        pi.set_pull_up_down(But2, pigpio.PUD_UP)
 
-        pi.write(OUT, 0) # Disable frequency output.
+        pi.set_mode(BTN_W, pigpio.INPUT)
+        pi.set_pull_up_down(BTN_W, pigpio.PUD_UP)
+        pi.callback(BTN_N, pigpio.EITHER_EDGE, self.wide_read)
+
+        pi.write(OUT, 0)  # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
         pi.set_mode(S3, pigpio.OUTPUT)
 
@@ -72,10 +71,9 @@ class sensor(threading.Thread):
         self._OE = OE
 
         # configure the chime pin for output.
-        pi.set_mode(21,pigpio.OUTPUT)
+        pi.set_mode(21, pigpio.OUTPUT)
 
         if (S0 is not None) and (S1 is not None):
-            
             self._mode_S0 = pi.get_mode(S0)
             self._mode_S1 = pi.get_mode(S1)
             pi.set_mode(S0, pigpio.OUTPUT)
@@ -84,26 +82,26 @@ class sensor(threading.Thread):
         if OE is not None:
             self._mode_OE = pi.get_mode(OE)
             pi.set_mode(OE, pigpio.OUTPUT)
-            pi.write(OE, 0) # Enable device (active low).
+            pi.write(OE, 0)  # Enable device (active low).
 
         self.set_sample_size(20)
 
-        self.set_update_interval(1.0) # One reading per second.
+        self.set_update_interval(1.0)  # One reading per second.
 
-        self.set_frequency(2) # 1 2%, 2 20%
+        self.set_frequency(2)  # 1 2%, 2 20%
 
-        self._set_filter(3) # Clear.
+        self._set_filter(3)  # Clear.
 
-        self._rgb_black = [0]*3
-        self._rgb_white = [10000]*3
+        self._rgb_black = [0] * 3
+        self._rgb_white = [10000] * 3
 
-        self.hertz=[0]*3 # Latest triplet.
-        self._hertz=[0]*3 # Current values.
+        self.hertz = [0] * 3  # Latest triplet.
+        self._hertz = [0] * 3  # Current values.
 
-        self.tally=[1]*3 # Latest triplet.
-        self._tally=[1]*3 # Current values.
+        self.tally = [1] * 3  # Latest triplet.
+        self._tally = [1] * 3  # Current values.
 
-        self._delay=[0.1]*3 # Tune delay to get _samples pulses.
+        self._delay = [0.1] * 3  # Tune delay to get _samples pulses.
 
         self._cycle = 0
 
@@ -123,9 +121,9 @@ class sensor(threading.Thread):
         self._cb_S2.cancel()
         self._cb_OUT.cancel()
 
-        self.set_frequency(0) # off
+        self.set_frequency(0)  # off
 
-        self._set_filter(3) # Clear
+        self._set_filter(3)  # Clear
 
         self._pi.set_mode(self._OUT, self._mode_OUT)
         self._pi.set_mode(self._S2, self._mode_S2)
@@ -136,35 +134,51 @@ class sensor(threading.Thread):
             self._pi.set_mode(self._S1, self._mode_S1)
 
         if self._OE is not None:
-            self._pi.write(self._OE, 1) # disable device
+            self._pi.write(self._OE, 1)  # disable device
             self._pi.set_mode(self._OE, self._mode_OE)
-            
+
         self._running = False
-        
-    def get_pH(self):
-        s = self.get_hertz()
-        
-        if s is None or not s or all(v == 0 for v in s):
+
+    def narrow_read(self):
+        return self.get_ph("narrow_data.csv")
+
+    def wide_read(self):
+        return self.get_ph("wide_data.csv")
+
+    def get_ph(self, file):
+        self.short_chime()
+
+        ref_data = {}
+        with open(file) as csvfile:
+            for row in csv.reader(csvfile):
+                ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
+        print("loaded {} refdata rows from {}".format(len(ref_data)), file)
+
+        sample = self.get_hertz()
+
+        if sample is None or not sample or all(v == 0 for v in sample):
             return 0
-        
+
         min_angle = 360
-        pH_found = None
-        for pH, v in self.ref_data.items():
-            #print (f"PH{pH}, v{v}")
-            dotproduct = v[0] * s[0] + v[1] *s[1] + v[2] * s[2]
-            v_length = math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
-            s_length = math.sqrt(s[0]**2 + s[1]**2 + s[2]**2)
+        ph_found = None
+        for pH, v in ref_data.items():
+            # print (f"PH{pH}, v{v}")
+            dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
+            v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
             cos_theta = dotproduct / (v_length * s_length)
-#            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
-            
+            #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
+
             theta = math.acos(cos_theta)
-            
-            if (theta < min_angle):
+
+            if theta < min_angle:
                 min_angle = theta
-                pH_found = pH
-                
-        return pH_found
-        
+                ph_found = pH
+
+        print(ph_found)
+        print(sample)
+        subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
+
 
     def get_rgb(self, top=255):
         """
@@ -182,12 +196,12 @@ class sensor(threading.Thread):
       0 and 255.  A different upper limit can be set by using
       the top parameter.
       """
-        rgb = [0]*3
+        rgb = [0] * 3
         for c in range(3):
             v = self.hertz[c] - self._rgb_black[c]
             s = self._rgb_white[c] - self._rgb_black[c]
             p = top * v / s
-            if p < 0:            
+            if p < 0:
                 p = 0
             elif p > top:
                 p = top
@@ -221,10 +235,10 @@ class sensor(threading.Thread):
             self._rgb_white[i] = rgb[i]
 
     def get_white_level(self):
-      """
+        """
       Get the white level calibration.
       """
-      return self._rgb_white[:]
+        return self._rgb_white[:]
 
     def set_frequency(self, f):
         """
@@ -236,14 +250,18 @@ class sensor(threading.Thread):
       2  H   L   20%
       3  H   H   100%
       """
-        if f == 0: # off
-            S0 = 0; S1 = 0
-        elif f == 1: # 2%
-            S0 = 0; S1 = 1
-        elif f == 2: # 20%
-            S0 = 1; S1 = 0
-        else: # 100%
-            S0 = 1; S1 = 1
+        if f == 0:  # off
+            S0 = 0
+            S1 = 0
+        elif f == 1:  # 2%
+            S0 = 0
+            S1 = 1
+        elif f == 2:  # 20%
+            S0 = 1
+            S1 = 0
+        else:  # 100%
+            S0 = 1
+            S1 = 1
 
         if (self._S0 is not None) and (self._S1 is not None):
             self._frequency = f
@@ -271,7 +289,7 @@ class sensor(threading.Thread):
       """
         return self._interval
 
-    def set_sample_size(self, samples):        
+    def set_sample_size(self, samples):
         """
       Set the sample size (number of frequency cycles to accumulate).
       """
@@ -300,24 +318,24 @@ class sensor(threading.Thread):
       """
         self._read = True
 
-    def long_chime(self):#Boot up signal
-        self._pi.write(21,1)
+    def long_chime(self):  # Boot up signal
+        self._pi.write(21, 1)
         time.sleep(2)
-        self._pi.write(21,0)
+        self._pi.write(21, 0)
 
-    def short_chime(self):#Test narrow range
-        self._pi.write(21,1)
+    def short_chime(self):  # Test narrow range
+        self._pi.write(21, 1)
         time.sleep(0.5)
-        self._pi.write(21,0)
-        
-    def short_double_chime(self):#Test wide range
-        self._pi.write(21,1)
+        self._pi.write(21, 0)
+
+    def short_double_chime(self):  # Test wide range
+        self._pi.write(21, 1)
         time.sleep(1)
-        self._pi.write(21,0)
+        self._pi.write(21, 0)
         time.sleep(1)
-        self._pi.write(21,1)
+        self._pi.write(21, 1)
         time.sleep(1)
-        self._pi.write(21,0)
+        self._pi.write(21, 0)
 
     def _set_filter(self, f):
         """
@@ -329,37 +347,42 @@ class sensor(threading.Thread):
       2  L   H   Blue
       3  H   L   Clear (no filter)
       """
-        if f == 0: # Red
-            S2 = 0; S3 = 0
-        elif f == 1: # Green
-            S2 = 1; S3 = 1
-        elif f == 2: # Blue
-            S2 = 0; S3 = 1
-        else: # Clear
-            S2 = 1; S3 = 0
+        if f == 0:  # Red
+            S2 = 0;
+            S3 = 0
+        elif f == 1:  # Green
+            S2 = 1;
+            S3 = 1
+        elif f == 2:  # Blue
+            S2 = 0;
+            S3 = 1
+        else:  # Clear
+            S2 = 1;
+            S3 = 0
 
-        self._pi.write(self._S2, S2); self._pi.write(self._S3, S3)
+        self._pi.write(self._S2, S2);
+        self._pi.write(self._S3, S3)
 
     def _cbf(self, g, l, t):
 
-        if g == self._OUT: # Frequency counter.
+        if g == self._OUT:  # Frequency counter.
             if self._cycle == 0:
                 self._start_tick = t
             else:
                 self._last_tick = t
             self._cycle += 1
 
-        else: # Must be transition between colour samples.
+        else:  # Must be transition between colour samples.
             if g == self._S2:
-                if l == 0: # Clear -> Red.
+                if l == 0:  # Clear -> Red.
                     self._cycle = 0
                     return
-                else:      # Blue -> Green.
+                else:  # Blue -> Green.
                     colour = 2
             else:
-                if l == 0: # Green -> Clear.
+                if l == 0:  # Green -> Clear.
                     colour = 1
-                else:      # Red -> Blue.
+                else:  # Red -> Blue.
                     colour = 0
 
             if self._cycle > 1:
@@ -373,7 +396,7 @@ class sensor(threading.Thread):
 
             self._cycle = 0
 
-         # Have we a new set of RGB?
+            # Have we a new set of RGB?
             if colour == 1:
                 for i in range(3):
                     self.hertz[i] = self._hertz[i]
@@ -386,44 +409,44 @@ class sensor(threading.Thread):
 
                 next_time = time.time() + self._interval
 
-                self._pi.set_mode(self._OUT, pigpio.INPUT) # Enable output gpio.
+                self._pi.set_mode(self._OUT, pigpio.INPUT)  # Enable output gpio.
 
-            # The order Red -> Blue -> Green -> Clear is needed by the
-            # callback function so that each S2/S3 transition triggers
-            # a state change.  The order was chosen so that a single
-            # gpio changes state between each colour to be sampled.
+                # The order Red -> Blue -> Green -> Clear is needed by the
+                # callback function so that each S2/S3 transition triggers
+                # a state change.  The order was chosen so that a single
+                # gpio changes state between each colour to be sampled.
 
-                self._set_filter(0) # Red
+                self._set_filter(0)  # Red
                 time.sleep(self._delay[0])
 
-                self._set_filter(2) # Blue
+                self._set_filter(2)  # Blue
                 time.sleep(self._delay[2])
 
-                self._set_filter(1) # Green
+                self._set_filter(1)  # Green
                 time.sleep(self._delay[1])
 
-                self._pi.write(self._OUT, 0) # Disable output gpio.
+                self._pi.write(self._OUT, 0)  # Disable output gpio.
 
-                self._set_filter(3) # Clear
+                self._set_filter(3)  # Clear
 
                 delay = next_time - time.time()
 
                 if delay > 0.0:
                     time.sleep(delay)
 
-            # Tune the next set of delays to get reasonable results
-            # as quickly as possible.
+                # Tune the next set of delays to get reasonable results
+                # as quickly as possible.
 
                 for c in range(3):
 
-               # Calculate dly needed to get _samples pulses.
+                    # Calculate dly needed to get _samples pulses.
 
                     if self.hertz[c]:
                         dly = self._samples / float(self.hertz[c])
-                    else: # Didn't find any edges, increase sample time.
+                    else:  # Didn't find any edges, increase sample time.
                         dly = self._delay[c] + 0.1
 
-               # Constrain dly to reasonable values.
+                    # Constrain dly to reasonable values.
 
                     if dly < 0.001:
                         dly = 0.001
@@ -435,11 +458,10 @@ class sensor(threading.Thread):
             else:
                 time.sleep(0.1)
 
-    def wait_for_button(self):
-        return pi.wait_for_edge(5, pigpio.FALLING_EDGE, 2.0)
 
 class GracefulKiller:
     kill_now = False
+
     def __init__(self):
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
@@ -447,28 +469,21 @@ class GracefulKiller:
     def exit_gracefully(self, signum, frame):
         self.kill_now = True
 
+
 if __name__ == "__main__":
 
     pi = pigpio.pi()
-    # get data file
-    filename =  sys.argv[1] if len(sys.argv) == 2 else "narrow_data.csv"
-    
-    s = sensor(pi, filename)
+
+    s = Sensor(pi)
     s.long_chime()
 
     killer = GracefulKiller()
-    
-    try: 
+
+    try:
         while not killer.kill_now:
-            
-            if s.wait_for_button():
-                s.short_chime()
-                
-                ph = s.get_pH()
-                print(ph)
-                print(s.get_hertz())
-                subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph}.MP3"]) 
-            
+            time.sleep(1)
+
+
     except Exception as e:
 
         print("cancelling", e)
