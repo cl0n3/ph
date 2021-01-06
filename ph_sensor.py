@@ -38,7 +38,7 @@ class Sensor(threading.Thread):
    pi, 24, 22, 23, 4, 17, 18)
    """
 
-    def __init__(self, pi, narrow_data, wide_data, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
+    def __init__(self, pi, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
         """
       The gpios connected to the sensor OUT, S2, and S3 pins must
       be specified.  The S0, S1 (frequency) and OE (output enable)
@@ -60,7 +60,7 @@ class Sensor(threading.Thread):
 
         pi.set_mode(BTN_W, pigpio.INPUT)
         pi.set_pull_up_down(BTN_W, pigpio.PUD_UP)
-        pi.callback(BTN_N, pigpio.EITHER_EDGE, self.wide_read)
+        pi.callback(BTN_W, pigpio.EITHER_EDGE, self.wide_read)
 
         pi.write(OUT, 0)  # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
@@ -139,20 +139,22 @@ class Sensor(threading.Thread):
 
         self._running = False
 
-    def narrow_read(self):
+    def narrow_read(self, gpio, level, tick):
         return self.get_ph("narrow_data.csv")
 
-    def wide_read(self):
+    def wide_read(self, gpio, level, tick): 
         return self.get_ph("wide_data.csv")
 
     def get_ph(self, file):
+        if not self.reading:
+            self.reading = True
         self.short_chime()
 
         ref_data = {}
         with open(file) as csvfile:
             for row in csv.reader(csvfile):
                 ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-        print("loaded {} refdata rows from {}".format(len(ref_data)), file)
+        print("loaded {} refdata rows from {}".format(len(ref_data), file))
 
         sample = self.get_hertz()
 
@@ -178,7 +180,7 @@ class Sensor(threading.Thread):
         print(ph_found)
         print(sample)
         subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
-
+        self.reading = False
 
     def get_rgb(self, top=255):
         """
