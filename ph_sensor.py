@@ -10,7 +10,7 @@ import subprocess
 
 BTN_N = 5
 BTN_W = 6
-
+HOME = '/home/pi/Projects'
 
 class Sensor(threading.Thread):
     """
@@ -141,47 +141,53 @@ class Sensor(threading.Thread):
         self._running = False
 
     def narrow_read(self, gpio, level, tick):
-        return self.get_ph("narrow_data.csv")
-
-    def wide_read(self, gpio, level, tick): 
-        return self.get_ph("wide_data.csv")
-
-    def get_ph(self, file):
         if not self.reading:
             self.reading = True
-            time.sleep(0.3)
             self.short_chime()
+            return self.get_ph(HOME + "/narrow_data.csv")
 
-            ref_data = {}
-            with open(file) as csvfile:
-                for row in csv.reader(csvfile):
-                    ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-            print("loaded {} refdata rows from {}".format(len(ref_data), file))
+        return None
 
-            sample = self.get_hertz()
+    def wide_read(self, gpio, level, tick): 
+        if not self.reading:
+            self.reading = True
+            self.short_chime()
+            self.short_chime()
+            return self.get_ph(HOME + "/wide_data.csv")
 
-            if sample is None or not sample or all(v == 0 for v in sample):
-                return 0
+        return None
 
-            min_angle = 360
-            ph_found = None
-            for pH, v in ref_data.items():
-                # print (f"PH{pH}, v{v}")
-                dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
-                v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
-                s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
-                cos_theta = dotproduct / (v_length * s_length)
-                #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
+    def get_ph(self, file):
+        ref_data = {}
+        with open(file) as csvfile:
+            for row in csv.reader(csvfile):
+                ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
+        print("loaded {} refdata rows from {}".format(len(ref_data), file))
 
-                theta = math.acos(cos_theta)
+        sample = self.get_hertz()
 
-                if theta < min_angle:
-                    min_angle = theta
-                    ph_found = pH
+        if sample is None or not sample or all(v == 0 for v in sample):
+            return 0
 
-            print(ph_found)
-            print(sample)
-            subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
+        min_angle = 360
+        ph_found = None
+        for pH, v in ref_data.items():
+            # print (f"PH{pH}, v{v}")
+            dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
+            v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
+            cos_theta = dotproduct / (v_length * s_length)
+            #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
+
+            theta = math.acos(cos_theta)
+
+            if theta < min_angle:
+                min_angle = theta
+                ph_found = pH
+
+        print(ph_found)
+        print(sample)
+        subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
 
     def get_rgb(self, top=255):
         """
