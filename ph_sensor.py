@@ -12,6 +12,7 @@ BTN_N = 5
 BTN_W = 6
 HOME = '/home/pi/Projects'
 
+
 class Sensor(threading.Thread):
     """
    This class reads RGB values from a TCS3200 colour sensor.
@@ -144,18 +145,14 @@ class Sensor(threading.Thread):
         if not self.reading:
             self.reading = True
             self.short_chime()
-            return self.get_ph(HOME + "/narrow_data.csv")
+            self.get_ph(HOME + "/narrow_data.csv")
 
-        return None
-
-    def wide_read(self, gpio, level, tick): 
+    def wide_read(self, gpio, level, tick):
         if not self.reading:
             self.reading = True
             self.short_chime()
             self.short_chime()
-            return self.get_ph(HOME + "/wide_data.csv")
-
-        return None
+            self.get_ph(HOME + "/wide_data.csv")
 
     def get_ph(self, file):
         ref_data = {}
