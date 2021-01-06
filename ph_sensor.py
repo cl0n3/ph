@@ -51,13 +51,17 @@ class sensor(threading.Thread):
         self._S2 = S2
         self._S3 = S3
         
-        But1 = 5
+        But1 = 5 #Narrow range pH test
         pi.set_mode(But1,pigpio.INPUT)
         pi.set_pull_up_down(But1, pigpio.PUD_UP)
 
         self._mode_OUT = pi.get_mode(OUT)
         self._mode_S2 = pi.get_mode(S2)
         self._mode_S3 = pi.get_mode(S3)
+        
+        But2 = 6 #Broad range pH test
+        pi.set_mode(But2,pigpio.INPUT)
+        pi.set_pull_up_down(But2, pigpio.PUD_UP)
 
         pi.write(OUT, 0) # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
@@ -296,14 +300,23 @@ class sensor(threading.Thread):
       """
         self._read = True
 
-    def long_chime(self):
+    def long_chime(self):#Boot up signal
         self._pi.write(21,1)
         time.sleep(2)
         self._pi.write(21,0)
 
-    def short_chime(self):
+    def short_chime(self):#Test narrow range
         self._pi.write(21,1)
         time.sleep(0.5)
+        self._pi.write(21,0)
+        
+    def short_double_chime(self):#Test wide range
+        self._pi.write(21,1)
+        time.sleep(1)
+        self._pi.write(21,0)
+        time.sleep(1)
+        self._pi.write(21,1)
+        time.sleep(1)
         self._pi.write(21,0)
 
     def _set_filter(self, f):
@@ -438,7 +451,7 @@ if __name__ == "__main__":
 
     pi = pigpio.pi()
     # get data file
-    filename =  sys.argv[1] if len(sys.argv) == 2 else "data.csv"
+    filename =  sys.argv[1] if len(sys.argv) == 2 else "narrow_data.csv"
     
     s = sensor(pi, filename)
     s.long_chime()
