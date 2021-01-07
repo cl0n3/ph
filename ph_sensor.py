@@ -1,3 +1,4 @@
+import logging
 import glob
 import signal
 import traceback
@@ -11,7 +12,8 @@ import subprocess
 
 BTN_N = 5
 BTN_W = 6
-HOME = '/home/pi/Projects'
+HOME = '/home/pi/ph'
+LOGS = '/home/pi/logs'
 
 
 class Sensor(threading.Thread):
@@ -117,7 +119,7 @@ class Sensor(threading.Thread):
         self.daemon = True
 
         self.start()
-        print("initialised")
+        logging.info("initialised")
 
     def cancel(self):
         """
@@ -146,7 +148,7 @@ class Sensor(threading.Thread):
         self._running = False
 
     def narrow_read(self, gpio, level, tick):
-        print("narrow read button press, reading={}".format(self.reading))
+        logging.debug("narrow read button press, reading={}".format(self.reading))
         if not self.reading:
             self.reading = True
             self.short_chime()
@@ -155,7 +157,7 @@ class Sensor(threading.Thread):
         return None
 
     def wide_read(self, gpio, level, tick):
-        print("wide read button press, reading={}".format(self.reading))
+        logging.debug("wide read button press, reading={}".format(self.reading))
         if not self.reading:
             self.reading = True
             self.short_double_chime()
@@ -168,7 +170,7 @@ class Sensor(threading.Thread):
         with open(file) as csvfile:
             for row in csv.reader(csvfile):
                 ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-        print("loaded {} refdata rows from {}".format(len(ref_data), file))
+        logging.debug("loaded {} refdata rows from {}".format(len(ref_data), file))
 
         sample = self.get_hertz()
 
@@ -178,12 +180,10 @@ class Sensor(threading.Thread):
         min_angle = 360
         ph_found = None
         for pH, v in ref_data.items():
-            # print (f"PH{pH}, v{v}")
             dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
             v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
             s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
             cos_theta = dotproduct / (v_length * s_length)
-            #            print (f"dot({dotproduct}) vLen({v_length}) sLen({s_length})")
 
             theta = math.acos(cos_theta)
 
@@ -191,19 +191,17 @@ class Sensor(threading.Thread):
                 min_angle = theta
                 ph_found = pH
 
-        print(ph_found)
-        print(sample)
+        logging.info('read Ph(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
         audiofile = self.find_audio_file(ph_found)
         if audiofile is not None:
             subprocess.run(["omxplayer", audiofile])
         else:
-            print(f'no audio file for {ph_found}')
+            logging.error(f'no audio file for {ph_found}')
 
     def find_audio_file(self, ph):
         audioDir = HOME + '/audio'
-        print(f'finding file {audioDir}/{ph}.mp3')
+        logging.debug(f'finding file {audioDir}/{ph}.mp3')
         for filename in glob.glob(audioDir + '/*'):
-            print(filename)
             if filename.lower() == f'{audioDir}/{ph}.mp3'.lower():
                 return str(filename)
 
@@ -501,6 +499,8 @@ class GracefulKiller:
 
 if __name__ == "__main__":
 
+    logging.basicConfig(filename=LOGS+'/ph_sensor.log', level=logging.DEBUG)
+    logging.debug('starting')
     pi = pigpio.pi()
 
     s = Sensor(pi)
@@ -517,6 +517,5 @@ if __name__ == "__main__":
 
     except Exception as e:
 
-        print("cancelling", e)
         traceback.print_exception(*sys.exc_info())
         s.cancel()
