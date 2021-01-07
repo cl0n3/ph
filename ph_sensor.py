@@ -77,6 +77,8 @@ class Buttons(threading.Thread):
         _pi.set_noise_filter(self.PIN_W, 300000, 100000)
         self._cb_pin_w = _pi.callback(self.PIN_W, pigpio.RISING_EDGE, self.on_button_pressed)
 
+        self.daemon = True
+
     def __del__(self):
         self._cb_pin_n.cancel()
         self._cb_pin_w.cancel()
@@ -448,6 +450,7 @@ class GracefulKiller:
         _signum = signum
         _frame = frame
         self.kill_now = True
+        print(f'exit signum({signum} frame({frame})') 
 
 
 if __name__ == "__main__":
