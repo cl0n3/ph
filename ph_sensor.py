@@ -1,3 +1,4 @@
+import glob
 import signal
 import traceback
 import csv
@@ -190,7 +191,21 @@ class Sensor(threading.Thread):
 
         print(ph_found)
         print(sample)
-        subprocess.run(["omxplayer", f"/home/pi/Projects/audio/{ph_found}.MP3"])
+        audiofile = self.find_audio_file(ph_found)
+        if audiofile is not None:
+            subprocess.run(["omxplayer", audiofile])
+        else:
+            print(f'no audio file for {ph_found}')
+
+    def find_audio_file(self, ph):
+        audioDir = HOME + '/audio'
+        print(f'finding file {audioDir}/{ph}.mp3')
+        for filename in glob.glob(audioDir + '/*'):
+            print(filename)
+            if filename.lower() == f'{audioDir}/{ph}.mp3'.lower():
+                return str(filename)
+
+        return None
 
     def get_rgb(self, top=255):
         """
