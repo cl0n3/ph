@@ -55,6 +55,7 @@ class Sensor(threading.Thread):
 
         pi.set_mode(BTN_N, pigpio.INPUT)
         pi.set_pull_up_down(BTN_N, pigpio.PUD_UP)
+        pi.set_noise_filter(BTN_N, 300000, 100000)
         pi.callback(BTN_N, pigpio.RISING_EDGE, self.narrow_read)
 
         self._mode_OUT = pi.get_mode(OUT)
@@ -64,6 +65,7 @@ class Sensor(threading.Thread):
         pi.set_mode(BTN_W, pigpio.INPUT)
         pi.set_pull_up_down(BTN_W, pigpio.PUD_UP)
         pi.callback(BTN_W, pigpio.RISING_EDGE, self.wide_read)
+        pi.set_noise_filter(BTN_W, 300000, 100000)
 
         pi.write(OUT, 0)  # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
@@ -508,7 +510,7 @@ if __name__ == "__main__":
 
     try:
         while not killer.kill_now:
-            time.sleep(10)
+            time.sleep(1)
             s.reading = False
 
 
