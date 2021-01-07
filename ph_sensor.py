@@ -455,7 +455,8 @@ if __name__ == "__main__":
 
     sensor = Sensor(rpi)
     chime = Chime(rpi)
-    buttons = Buttons(rpi, sensor, chime)
+    audio = Audio()
+    buttons = Buttons(rpi, sensor, chime, audio)
 
     sensor.start()
     buttons.start()
