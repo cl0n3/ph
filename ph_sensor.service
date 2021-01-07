@@ -5,7 +5,8 @@ Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/pi/Projects/ph_sensor.py
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3.7 /home/pi/ph/ph_sensor.py
 StandardInput=tty-force
 
 [Install]
