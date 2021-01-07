@@ -42,6 +42,8 @@ class Sensor(threading.Thread):
    pi, 24, 22, 23, 4, 17, 18)
    """
 
+    _last_tick = 0
+    _start_tick = 0
     def __init__(self, pi, OUT=24, S2=22, S3=23, S0=4, S1=17, OE=18):
         """
       The gpios connected to the sensor OUT, S2, and S3 pins must
@@ -72,6 +74,7 @@ class Sensor(threading.Thread):
         pi.write(OUT, 0)  # Disable frequency output.
         pi.set_mode(S2, pigpio.OUTPUT)
         pi.set_mode(S3, pigpio.OUTPUT)
+        pi.set_mode(OUT, pigpio.INPUT)  # Enable output gpio.
 
         self._S0 = S0
         self._S1 = S1
@@ -338,12 +341,14 @@ class Sensor(threading.Thread):
       Pause reading (until a call to resume).
       """
         self._read = False
+        logging.debug('pause _read(False)')
 
     def resume(self):
         """
       Resume reading (after a call to pause).
       """
         self._read = True
+        logging.debug('resume _read(True)')
 
     def long_chime(self):  # Boot up signal
         self._pi.write(21, 1)
@@ -519,7 +524,7 @@ class GracefulKiller:
 
 if __name__ == "__main__":
 
-    logging.basicConfig(format='%asctime)c [%(levelname)s] %(name) [%(thread)d %threadName)s]: %(message)',
+    logging.basicConfig(format='%(asctime)s [%(levelname)s] %(name)s [%(thread)d %(threadName)s]: %(message)s',
                         filename=LOGS+'/ph_sensor.log', level=logging.DEBUG)
     logging.debug('starting')
     pi = pigpio.pi()
