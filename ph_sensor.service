@@ -5,6 +5,7 @@ After=pigpiod.service
 [Service]
 Type=simple
 Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/pi/ph
 ExecStart=/usr/bin/python3.7 /home/pi/ph/ph_sensor.py
 User=pi
 Group=pi

@@ -1,4 +1,5 @@
 import math
+import os
 import logging
 import glob
 import signal
@@ -495,8 +496,8 @@ class GracefulKiller:
 
 if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s [%(levelname)s] %(name)s [%(thread)d %(threadName)s]: %(message)s',
-                        filename=LOGS+'/ph_sensor.log', level=logging.DEBUG)
-    logging.debug('starting')
+                        filename=LOGS+'/ph_sensor.log', level=logging.INFO)
+    logging.info(f'starting cwd({os.getcwd()})')
 
     rpi = pigpio.pi()
     sensor = Sensor(rpi)
