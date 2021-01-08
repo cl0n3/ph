@@ -243,6 +243,22 @@ class IntegrationTest(unittest.TestCase):
         pass
 
     def testSensorReadOnButton(self):
+
+        self.assertFalse(self.buttons.wide_read)
+        self.assertFalse(self.buttons.narrow_read)
+
         self.buttons.on_button_pressed(Buttons.PIN_W, 0, 1)
+
+        self.assertTrue(self.buttons.wide_read)
+        self.assertFalse(self.buttons.narrow_read)
+
         self.buttons.request_reading()
+
+        self.assertEqual(len(self.sensor._reads), 1)
+
+        self.sensor.cycle_sensor()
+
+        print(str(self.audio.plays))
+
+        self.audio.has_played(0)
 

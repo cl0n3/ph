@@ -91,6 +91,13 @@ class Buttons(threading.Thread):
         self.pi.set_mode(self.PIN_W, self._mode_pin_w)
 
     def on_button_pressed(self, gpio, level, tick):
+        """
+        Invoked on the GPIO threads.
+        @param gpio: pin
+        @param level: pin level, likely 1.
+        @param tick:
+        @return: None
+        """
         _ticks = tick
         _level = level
         if gpio == self.PIN_N:
@@ -99,15 +106,30 @@ class Buttons(threading.Thread):
             self.wide_read = True
 
     def request_reading(self):
+        """
+        Invoked on the Buttons thread, which monitors the flags set on the pigpio thread.
+        @return: None
+        """
         if self.narrow_read:
             self.chime.short_chime()
-            self.audio.play(self.sensor.narrow_read())
-            self.narrow_read = False
-
+            self.sensor.request_read({
+                'file': './narrow_data.csv',
+                'callback': self.report_reading
+            })
         elif self.wide_read:
             self.chime.double_short_chime()
-            self.audio.play(self.sensor.wide_read())
-            self.wide_read = False
+            self.sensor.request_read({
+                'file': './wide_data.csv',
+                'callback': self.report_reading
+            })
+
+    def report_reading(self, ph):
+        """
+        Invoked from the Sensor thread to report it's result.
+        @param ph: the PH reading found from the sensor.
+        @return: None
+        """
+        self.audio.play(ph)
 
     def run(self):
         while True:
@@ -149,8 +171,8 @@ class Sensor(threading.Thread):
     PIN_S0 = 4
     PIN_OE = 18
 
+    _reads = []
     _frequency = None
-    _read = False
     _interval = 1.0  # One reading per second.
 
     hertz = [0] * 3  # Latest triplet.
@@ -160,7 +182,6 @@ class Sensor(threading.Thread):
     _delay = [0.1] * 3  # Tune delay to get _samples pulses.
     _cycle = 0
     _samples = 0
-
     _last_tick = 0
     _start_tick = 0
 
@@ -214,43 +235,9 @@ class Sensor(threading.Thread):
 
         self._pi.write(self.PIN_OE, self.INACTIVE)  # disable device
 
-    def narrow_read(self):
-        logging.debug("narrow read button press")
-        return self.get_ph("./narrow_data.csv")
-
-    def wide_read(self):
-        logging.debug("wide read button press")
-        return self.get_ph("./wide_data.csv")
-
-    def get_ph(self, file):
-        self.resume()
-        ref_data = {}
-        with open(file) as csvFile:
-            for row in csv.reader(csvFile):
-                ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
-        logging.debug("loaded {} ref data rows from {}".format(len(ref_data), file))
-
-        sample = self.get_hertz()
-
-        if sample is None or not sample or all(v == 0 for v in sample):
-            return 0
-
-        min_angle = 360
-        ph_found = None
-        for pH, v in ref_data.items():
-            dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
-            v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
-            s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
-            cos_theta = dotproduct / (v_length * s_length)
-            theta = math.acos(cos_theta)
-
-            if theta < min_angle:
-                min_angle = theta
-                ph_found = pH
-
-        logging.info('read PH(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
-
-        return ph_found
+    def request_read(self, req):
+        self._reads.append(req)
+        logging.debug('received read request req(%s)', req)
 
     def get_hertz(self):
         return self.hertz[:]
@@ -306,14 +293,6 @@ class Sensor(threading.Thread):
     def get_sample_size(self):
         return self._samples
 
-    def pause(self):
-        self._read = False
-        logging.debug('pause _read(False)')
-
-    def resume(self):
-        self._read = True
-        logging.debug('resume _read(True)')
-
     def _set_filter(self, f):
         """
             Set the colour to be sampled.
@@ -346,6 +325,8 @@ class Sensor(threading.Thread):
 
     def _cbf(self, gpio, level, tick):
         """
+            Invoked on the GPIO thread.
+
             @param gpio 0-31 The GPIO which has changed state
             @param level 0-2     0 = change to low (a falling edge)
                                  1 = change to high (a rising edge)
@@ -396,75 +377,107 @@ class Sensor(threading.Thread):
 
             self._cycle = 0
 
-            # Have we a new set of RGB?
             if colour == 1:
                 for i in range(3):
                     self.hertz[i] = self._hertz[i]
                     self.tally[i] = self._tally[i]
 
+    def cycle_sensor(self):
+        req = self._reads.pop()
+
+        next_time = time.time() + self._interval
+        logging.debug('next_time(%s)', next_time)
+        self._pi.set_mode(self.PIN_OUT, pigpio.INPUT)  # Enable output gpio.
+
+        # The order Red -> Blue -> Green -> Clear is needed by the
+        # callback function so that each S2/S3 transition triggers
+        # a state change.  The order was chosen so that a single
+        # gpio changes state between each colour to be sampled.
+
+        self._set_filter(0)  # Red
+        logging.debug('set_filter(red) sleeping(%s)', self._delay[0])
+        time.sleep(self._delay[0])
+
+        self._set_filter(2)  # Blue
+        logging.debug('set_filter(blue) sleeping(%s)', self._delay[2])
+        time.sleep(self._delay[2])
+
+        self._set_filter(1)  # Green
+        logging.debug('set_filter(green) sleeping(%s)', self._delay[1])
+        time.sleep(self._delay[1])
+
+        self._pi.write(self.PIN_OUT, 0)  # Disable output gpio.
+
+        self._set_filter(3)  # Clear
+        delay = next_time - time.time()
+        logging.debug('set_filter(clear) sleeping(%s)', delay)
+
+        if delay > 0.0:
+            time.sleep(delay)
+
+        # Tune the next set of delays to get reasonable results
+        # as quickly as possible.
+
+        for c in range(3):
+
+            # Calculate dly needed to get _samples pulses.
+
+            if self.hertz[c]:
+                dly = self._samples / float(self.hertz[c])
+                logging.debug('updating delays hertz(%s)(%s) samples(%s) delay(%s)',
+                              c, self.hertz[c], self._samples, dly)
+            else:  # Didn't find any edges, increase sample time.
+                dly = self._delay[c] + 0.1
+                logging.debug('no edges delay(%s)', dly)
+
+            # Constrain dly to reasonable values.
+
+            if dly < 0.001:
+                dly = 0.001
+                logging.debug('capping delay(%s)', dly)
+            elif dly > 0.5:
+                dly = 0.5
+                logging.debug('capping delay(%s)', dly)
+
+            self._delay[c] = dly
+
+        file = req['file']
+
+        ref_data = {}
+        with open(file) as csvFile:
+            for row in csv.reader(csvFile):
+                ref_data[row[0]] = [int(row[1]), int(row[2]), int(row[3])]
+        logging.debug("loaded {} ref data rows from {}".format(len(ref_data), file))
+
+        sample = self.get_hertz()
+
+        if sample is None or not sample or all(v == 0 for v in sample):
+            logging.error("no colour samples to analyse")
+            return None
+
+        min_angle = 360
+        ph_found = None
+        for pH, v in ref_data.items():
+            dotproduct = v[0] * sample[0] + v[1] * sample[1] + v[2] * sample[2]
+            v_length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            s_length = math.sqrt(sample[0] ** 2 + sample[1] ** 2 + sample[2] ** 2)
+            cos_theta = dotproduct / (v_length * s_length)
+            theta = math.acos(cos_theta)
+
+            if theta < min_angle:
+                min_angle = theta
+                ph_found = pH
+
+        logging.info('read PH(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
+
+        callback = req['callback']
+        if callback:
+            callback(ph_found)
+
     def run(self):
-        self.resume()
         while True:
-            if self._read:
-
-                next_time = time.time() + self._interval
-                logging.debug('next_time(%s)', next_time)
-                self._pi.set_mode(self.PIN_OUT, pigpio.INPUT)  # Enable output gpio.
-
-                # The order Red -> Blue -> Green -> Clear is needed by the
-                # callback function so that each S2/S3 transition triggers
-                # a state change.  The order was chosen so that a single
-                # gpio changes state between each colour to be sampled.
-
-                self._set_filter(0)  # Red
-                logging.debug('set_filter(red) sleeping(%s)', self._delay[0])
-                time.sleep(self._delay[0])
-
-                self._set_filter(2)  # Blue
-                logging.debug('set_filter(blue) sleeping(%s)', self._delay[2])
-                time.sleep(self._delay[2])
-
-                self._set_filter(1)  # Green
-                logging.debug('set_filter(green) sleeping(%s)', self._delay[1])
-                time.sleep(self._delay[1])
-
-                self._pi.write(self.PIN_OUT, 0)  # Disable output gpio.
-
-                self._set_filter(3)  # Clear
-                delay = next_time - time.time()
-                logging.debug('set_filter(clear) sleeping(%s)', delay)
-
-                if delay > 0.0:
-                    time.sleep(delay)
-
-                # Tune the next set of delays to get reasonable results
-                # as quickly as possible.
-
-                for c in range(3):
-
-                    # Calculate dly needed to get _samples pulses.
-
-                    if self.hertz[c]:
-                        dly = self._samples / float(self.hertz[c])
-                        logging.debug('updating delays hertz(%s)(%s) samples(%s) delay(%s)',
-                                      c, self.hertz[c], self._samples, dly)
-                    else:  # Didn't find any edges, increase sample time.
-                        dly = self._delay[c] + 0.1
-                        logging.debug('no edges delay(%s)', dly)
-
-                    # Constrain dly to reasonable values.
-
-                    if dly < 0.001:
-                        dly = 0.001
-                        logging.debug('capping delay(%s)', dly)
-                    elif dly > 0.5:
-                        dly = 0.5
-                        logging.debug('capping delay(%s)', dly)
-
-                    self._delay[c] = dly
-
-                self.pause()
-
+            if len(self._reads) != 0:
+                self.cycle_sensor()
             else:
                 logging.debug('sleeping (0.1)')
                 time.sleep(0.1)
