@@ -113,17 +113,11 @@ class Buttons(threading.Thread):
         if self.narrow_read:
             self.narrow_read = False
             self.chime.short_chime()
-            self.sensor.request_read({
-                'file': './narrow_data.csv',
-                'callback': self.report_reading
-            })
+            self.sensor.request_read('narrow', self.report_reading)
         elif self.wide_read:
             self.wide_read = False
             self.chime.double_short_chime()
-            self.sensor.request_read({
-                'file': './wide_data.csv',
-                'callback': self.report_reading
-            })
+            self.sensor.request_read('wide', self.report_reading)
 
     def report_reading(self, ph):
         """
@@ -175,6 +169,7 @@ class Sensor(threading.Thread):
 
     _reads = []
     _frequency = None
+    _filter = 3
     _interval = 1.0  # One reading per second.
 
     hertz = [0] * 3  # Latest triplet.
@@ -183,7 +178,7 @@ class Sensor(threading.Thread):
     _tally = [1] * 3  # Current values.
     _delay = [0.1] * 3  # Tune delay to get _samples pulses.
     _cycle = 0
-    _samples = 0
+    _samples = 20
     _last_tick = 0
     _start_tick = 0
 
@@ -205,14 +200,12 @@ class Sensor(threading.Thread):
         pi.set_mode(self.PIN_S3, pigpio.OUTPUT)
         pi.set_mode(self.PIN_OE, pigpio.OUTPUT)
 
-        self._cb_OUT = pi.callback(self.PIN_OUT, pigpio.RISING_EDGE, self._cbf)
-        self._cb_S2 = pi.callback(self.PIN_S2, pigpio.EITHER_EDGE, self._cbf)
-        self._cb_S3 = pi.callback(self.PIN_S3, pigpio.EITHER_EDGE, self._cbf)
+        self._cb_OUT = pi.callback(self.PIN_OUT, pigpio.RISING_EDGE, self.gpio_callback)
+        self._cb_S2 = pi.callback(self.PIN_S2, pigpio.EITHER_EDGE, self.gpio_callback)
+        self._cb_S3 = pi.callback(self.PIN_S3, pigpio.EITHER_EDGE, self.gpio_callback)
 
-        self.set_sample_size(20)
-        self.set_update_interval(1.0)
-        self.set_frequency(2)  # 1 2%, 2 20%
-        self._set_filter(3)  # Clear
+        self.set_frequency(2)
+        self.set_filter(3)
 
         pi.write(self.PIN_OUT, 0)  # Disable frequency output.
         pi.write(self.PIN_OE, self.ACTIVE)  # Enable device (active low).
@@ -226,7 +219,7 @@ class Sensor(threading.Thread):
         self._cb_OUT.cancel()
 
         self.set_frequency(0)  # off
-        self._set_filter(3)  # Clear
+        self.set_filter(3)  # Clear
 
         self._pi.set_mode(self.PIN_OUT, self._mode_OUT)
         self._pi.set_mode(self.PIN_S0, self._mode_S0)
@@ -237,9 +230,13 @@ class Sensor(threading.Thread):
 
         self._pi.write(self.PIN_OE, self.INACTIVE)  # disable device
 
-    def request_read(self, req):
+    def request_read(self, read_type, callback):
+        req = {
+            'file': f'./{read_type}_data.csv',
+            'callback': callback
+        }
         self._reads.append(req)
-        logging.debug('received read request req(%s)', req)
+        logging.debug('received read request req(%s)', str(req))
 
     def get_hertz(self):
         return self.hertz[:]
@@ -295,7 +292,7 @@ class Sensor(threading.Thread):
     def get_sample_size(self):
         return self._samples
 
-    def _set_filter(self, f):
+    def set_filter(self, f):
         """
             Set the colour to be sampled.
 
@@ -305,7 +302,7 @@ class Sensor(threading.Thread):
             2  L   H   Blue
             3  H   L   Clear (no filter)
         """
-        self.filter = f
+        self._filter = f
         if f == 0:  # Red
             s2 = 0
             s3 = 0
@@ -323,9 +320,9 @@ class Sensor(threading.Thread):
         self._pi.write(self.PIN_S3, s3)
 
     def get_filter(self):
-        return self.filter
+        return self._filter
 
-    def _cbf(self, gpio, level, tick):
+    def gpio_callback(self, gpio, level, tick):
         logger = logging.Logger('gpio')
         logger.setLevel(logging.INFO)
         """
@@ -346,7 +343,7 @@ class Sensor(threading.Thread):
                 self._last_tick = tick
             self._cycle += 1
             logger.debug('updating frequency counter cycle(%s) start_tick(%s) last_tick(%s)',
-                          self._cycle, self._start_tick, self._last_tick)
+                         self._cycle, self._start_tick, self._last_tick)
 
         else:  # Must be transition between colour samples.
             logger.debug('colour transition')
@@ -372,7 +369,7 @@ class Sensor(threading.Thread):
                 self._hertz[colour] = (1000000 * self._cycle) / td
                 self._tally[colour] = self._cycle
                 logger.debug('updated hertz cycle(%s) td(%s) hertz(%s)(%s) tally(%s)(%s)',
-                              self._cycle, td, colour, self._hertz[colour], colour, self._tally[colour])
+                             self._cycle, td, colour, self._hertz[colour], colour, self._tally[colour])
 
             else:
                 self._hertz[colour] = 0
@@ -399,21 +396,21 @@ class Sensor(threading.Thread):
         # a state change.  The order was chosen so that a single
         # gpio changes state between each colour to be sampled.
 
-        self._set_filter(0)  # Red
+        self.set_filter(0)  # Red
         logging.debug('set_filter(red) sleeping(%s)', self._delay[0])
         time.sleep(self._delay[0])
 
-        self._set_filter(2)  # Blue
+        self.set_filter(2)  # Blue
         logging.debug('set_filter(blue) sleeping(%s)', self._delay[2])
         time.sleep(self._delay[2])
 
-        self._set_filter(1)  # Green
+        self.set_filter(1)  # Green
         logging.debug('set_filter(green) sleeping(%s)', self._delay[1])
         time.sleep(self._delay[1])
 
         self._pi.write(self.PIN_OUT, 0)  # Disable output gpio.
 
-        self._set_filter(3)  # Clear
+        self.set_filter(3)  # Clear
         delay = next_time - time.time()
         logging.debug('set_filter(clear) sleeping(%s)', delay)
 
