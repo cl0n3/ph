@@ -81,6 +81,7 @@ class Buttons(threading.Thread):
         self._cb_pin_w = _pi.callback(self.PIN_W, pigpio.RISING_EDGE, self.on_button_pressed)
 
         self.daemon = True
+        self.name = 'Buttons'
 
     def __del__(self):
         self._cb_pin_n.cancel()
@@ -149,7 +150,6 @@ class Sensor(threading.Thread):
     PIN_OE = 18
 
     _frequency = None
-    reading = False
     _read = False
     _interval = 1.0  # One reading per second.
 
@@ -195,6 +195,7 @@ class Sensor(threading.Thread):
         pi.write(self.PIN_OE, self.ACTIVE)  # Enable device (active low).
 
         self.daemon = True
+        self.name = 'Sensor'
 
     def __del__(self):
         self._cb_S3.cancel()
@@ -214,11 +215,11 @@ class Sensor(threading.Thread):
         self._pi.write(self.PIN_OE, self.INACTIVE)  # disable device
 
     def narrow_read(self):
-        logging.debug("narrow read button press, reading={}".format(self.reading))
+        logging.debug("narrow read button press")
         return self.get_ph("./narrow_data.csv")
 
     def wide_read(self):
-        logging.debug("wide read button press, reading={}".format(self.reading))
+        logging.debug("wide read button press")
         return self.get_ph("./wide_data.csv")
 
     def get_ph(self, file):
@@ -247,7 +248,7 @@ class Sensor(threading.Thread):
                 min_angle = theta
                 ph_found = pH
 
-        logging.info('read Ph(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
+        logging.info('read PH(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
 
         return ph_found
 
@@ -402,7 +403,7 @@ class Sensor(threading.Thread):
                     self.tally[i] = self._tally[i]
 
     def run(self):
-        self._read = True
+        self.resume()
         while True:
             if self._read:
 
@@ -461,6 +462,8 @@ class Sensor(threading.Thread):
                         logging.debug('capping delay(%s)', dly)
 
                     self._delay[c] = dly
+
+                self.pause()
 
             else:
                 logging.debug('sleeping (0.1)')
