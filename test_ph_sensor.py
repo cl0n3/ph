@@ -240,7 +240,7 @@ class IntegrationTest(unittest.TestCase):
         self.buttons = Buttons(self.pi, self.sensor, self.chime, self.audio)
 
     def testInit(self):
-        passq
+        pass
 
     def testSensorReadOnButton(self):
         self.buttons.on_button_pressed(Buttons.PIN_W, 0, 1)

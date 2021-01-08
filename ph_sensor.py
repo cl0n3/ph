@@ -217,7 +217,7 @@ class Sensor(threading.Thread):
         logging.debug("narrow read button press, reading={}".format(self.reading))
         return self.get_ph(HOME + "/narrow_data.csv")
 
-    def wide_read(self, gpio, level, tick):
+    def wide_read(self):
         logging.debug("wide read button press, reading={}".format(self.reading))
         return self.get_ph(HOME + "/wide_data.csv")
 
