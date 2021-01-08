@@ -41,7 +41,7 @@ class Chime:
 
 
 class Audio:
-    audioDir = './audio'
+    audioDir = os.getcwd() + '/audio'
 
     def play(self, ph):
         logging.debug(f'finding file {self.audioDir}/{ph}.mp3')
@@ -111,12 +111,14 @@ class Buttons(threading.Thread):
         @return: None
         """
         if self.narrow_read:
+            self.narrow_read = False
             self.chime.short_chime()
             self.sensor.request_read({
                 'file': './narrow_data.csv',
                 'callback': self.report_reading
             })
         elif self.wide_read:
+            self.wide_read = False
             self.chime.double_short_chime()
             self.sensor.request_read({
                 'file': './wide_data.csv',
@@ -324,6 +326,8 @@ class Sensor(threading.Thread):
         return self.filter
 
     def _cbf(self, gpio, level, tick):
+        logger = logging.Logger('gpio')
+        logger.setLevel(logging.INFO)
         """
             Invoked on the GPIO thread.
 
@@ -334,46 +338,46 @@ class Sensor(threading.Thread):
             @param tick 32-bit The number of microseconds since boot
                 WARNING: this wraps around from 4294967295 to 0 roughly every 72 minutes
         """
-        logging.debug('gpio(%s) level(%s) tick(%s)', gpio, level, tick)
+        logger.debug('gpio(%s) level(%s) tick(%s)', gpio, level, tick)
         if gpio == self.PIN_OUT:  # Frequency counter.
             if self._cycle == 0:
                 self._start_tick = tick
             else:
                 self._last_tick = tick
             self._cycle += 1
-            logging.debug('updating frequency counter cycle(%s) start_tick(%s) last_tick(%s)',
+            logger.debug('updating frequency counter cycle(%s) start_tick(%s) last_tick(%s)',
                           self._cycle, self._start_tick, self._last_tick)
 
         else:  # Must be transition between colour samples.
-            logging.debug('colour transition')
+            logger.debug('colour transition')
             if gpio == self.PIN_S2:
                 if level == 0:  # Clear -> Red.
                     self._cycle = 0
-                    logging.debug('clear->red')
+                    logger.debug('clear->red')
                     return
                 else:  # Blue -> Green.
                     colour = 2
-                    logging.debug('blue->green')
+                    logger.debug('blue->green')
             else:
                 if level == 0:  # Green -> Clear.
                     colour = 1
-                    logging.debug('green->clear')
+                    logger.debug('green->clear')
                 else:  # Red -> Blue.
                     colour = 0
-                    logging.debug('red->blue')
+                    logger.debug('red->blue')
 
             if self._cycle > 1:
                 self._cycle -= 1
                 td = pigpio.tickDiff(self._start_tick, self._last_tick)
                 self._hertz[colour] = (1000000 * self._cycle) / td
                 self._tally[colour] = self._cycle
-                logging.debug('updated hertz cycle(%s) td(%s) hertz(%s)(%s) tally(%s)(%s)',
+                logger.debug('updated hertz cycle(%s) td(%s) hertz(%s)(%s) tally(%s)(%s)',
                               self._cycle, td, colour, self._hertz[colour], colour, self._tally[colour])
 
             else:
                 self._hertz[colour] = 0
                 self._tally[colour] = 0
-                logging.debug('reset hertz and tally')
+                logger.debug('reset hertz and tally')
 
             self._cycle = 0
 
@@ -384,6 +388,7 @@ class Sensor(threading.Thread):
 
     def cycle_sensor(self):
         req = self._reads.pop()
+        logging.debug(f'servicing request({str(req)}), remaining requests {len(self._reads)}')
 
         next_time = time.time() + self._interval
         logging.debug('next_time(%s)', next_time)
@@ -479,8 +484,7 @@ class Sensor(threading.Thread):
             if len(self._reads) != 0:
                 self.cycle_sensor()
             else:
-                logging.debug('sleeping (0.1)')
-                time.sleep(0.1)
+                time.sleep(1)
 
 
 class GracefulKiller:
@@ -499,7 +503,7 @@ class GracefulKiller:
 
 if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s [%(levelname)s] %(name)s [%(thread)d %(threadName)s]: %(message)s',
-                        filename='../logs/ph_sensor.log', level=logging.INFO)
+                        filename='../logs/ph_sensor.log', level=logging.DEBUG)
     logging.info(f'starting cwd({os.getcwd()})')
 
     rpi = pigpio.pi()
