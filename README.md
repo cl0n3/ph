@@ -1,5 +1,5 @@
 # PH Sensor
-The PH Sensor can read litmus paper samples and match the colours against a trained dataset. It allows for two data sets to cover different litmas paper scales
+The PH Sensor can read litmus paper samples and match the colours against a trained dataset. It allows for two data sets to cover different litmus paper scales
 
 ##Architecture
 The system uses these components: 
@@ -26,7 +26,7 @@ The library is installed under the standard *pi* user under a directory */home/p
 
 All the required python libraries are installed in the global python instance located at */usr/bin/python3.7*
 
-The *pipgiod* service must be running to allow communication with the GPIO.
+The *pigpiod* service must be running to allow communication with the GPIO.
 
 Systemd manages pigpiod: 
 
@@ -54,7 +54,16 @@ The Systemd unit file is symlinked to the */home/pi/ph/ph_sensor.service* file.
 
 The symlink is stored at */lib/systemd/system/*
 
-There is a script */home/pi/bin/restartph* which allows for convenient restarting. 
+There are some utility scripts
+ 
+ ```console
+/home/pi/bin/phstatus
+
+/home/pi/bin/phstop
+
+/home/pi/bin/phstart
+```
+which allow for convenient status/stop/start. 
 
 ### Running in place 
 
