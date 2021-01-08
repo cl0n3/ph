@@ -13,7 +13,7 @@ The system uses these components:
 ### Threading Model
 The driver contains four threads
 1. The main thread which servers only to keep the process alive and capture operating system signals such as SIGTERM
-2. A Sensor thread, which drives the TCS3200 control lines to toggle the colour sampling
+2. A Sensor thread, which drives the [TCS3200](https://datasheet.lcsc.com/szlcsc/1811181405_Ams-AG-TCS3200D-TR_C92501.pdf) control lines to toggle the colour sampling
 3. A Button thread, which handles the toggling of the two switches. It provides a basic debounce mechanism.
 4. The pigpio library spawn a thread to handle callbacks from the TCS3200. Both the buttons and the sensors signals (S2/S3/OUT) receive callbacks on this thread.
 

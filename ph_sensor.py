@@ -1,18 +1,13 @@
+import csv
+import glob
+import logging
 import math
 import os
-import logging
-import glob
 import signal
 import subprocess
-import csv
-import sys
 import threading
 import time
-import traceback
 import pigpio
-
-HOME = '.'
-LOGS = '/home/pi/logs'
 
 
 class Chime:
@@ -220,11 +215,11 @@ class Sensor(threading.Thread):
 
     def narrow_read(self):
         logging.debug("narrow read button press, reading={}".format(self.reading))
-        return self.get_ph(HOME + "/narrow_data.csv")
+        return self.get_ph("./narrow_data.csv")
 
     def wide_read(self):
         logging.debug("wide read button press, reading={}".format(self.reading))
-        return self.get_ph(HOME + "/wide_data.csv")
+        return self.get_ph("./wide_data.csv")
 
     def get_ph(self, file):
         self.resume()
@@ -488,7 +483,7 @@ class GracefulKiller:
 
 if __name__ == "__main__":
     logging.basicConfig(format='%(asctime)s [%(levelname)s] %(name)s [%(thread)d %(threadName)s]: %(message)s',
-                        filename=LOGS+'/ph_sensor.log', level=logging.INFO)
+                        filename='../logs/ph_sensor.log', level=logging.INFO)
     logging.info(f'starting cwd({os.getcwd()})')
 
     rpi = pigpio.pi()
@@ -504,9 +499,5 @@ if __name__ == "__main__":
 
     killer = GracefulKiller()
 
-    try:
-        while not killer.kill_now:
-            time.sleep(1)
-
-    except Exception as e:
-        traceback.print_exception(*sys.exc_info())
+    while not killer.kill_now:
+        time.sleep(1)
