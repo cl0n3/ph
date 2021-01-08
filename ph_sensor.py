@@ -24,7 +24,7 @@ class Chime:
         self._pi.set_mode(self.PIN, self._mode_PIN)
 
     def long_chime(self):
-        self._on(self.ON)
+        self._on(0.5)
 
     def short_chime(self):
         self._on()

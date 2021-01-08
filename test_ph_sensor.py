@@ -193,7 +193,7 @@ class ChimeTest(unittest.TestCase):
 
     def testLongChime(self):
         self.chime.long_chime()
-        self.assertTrue(self.pi.had_pulse(Chime.PIN, Chime.ON, 1000))
+        self.assertTrue(self.pi.had_pulse(Chime.PIN, Chime.ON, 500))
 
     def testShortChime(self):
         self.chime.short_chime()
