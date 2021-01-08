@@ -182,8 +182,12 @@ class Sensor(threading.Thread):
     _last_tick = 0
     _start_tick = 0
 
+    gpiolog = logging.Logger('gpio')
+
     def __init__(self, pi):
         threading.Thread.__init__(self)
+
+        self.gpiolog.setLevel(logging.INFO)
 
         self._pi = pi
 
@@ -323,8 +327,6 @@ class Sensor(threading.Thread):
         return self._filter
 
     def gpio_callback(self, gpio, level, tick):
-        logger = logging.Logger('gpio')
-        logger.setLevel(logging.INFO)
         """
             Invoked on the GPIO thread.
 
@@ -335,46 +337,46 @@ class Sensor(threading.Thread):
             @param tick 32-bit The number of microseconds since boot
                 WARNING: this wraps around from 4294967295 to 0 roughly every 72 minutes
         """
-        logger.debug('gpio(%s) level(%s) tick(%s)', gpio, level, tick)
+        self.gpiolog.debug('gpio(%s) level(%s) tick(%s)', gpio, level, tick)
         if gpio == self.PIN_OUT:  # Frequency counter.
             if self._cycle == 0:
                 self._start_tick = tick
             else:
                 self._last_tick = tick
             self._cycle += 1
-            logger.debug('updating frequency counter cycle(%s) start_tick(%s) last_tick(%s)',
+            self.gpiolog.debug('updating frequency counter cycle(%s) start_tick(%s) last_tick(%s)',
                          self._cycle, self._start_tick, self._last_tick)
 
         else:  # Must be transition between colour samples.
-            logger.debug('colour transition')
+            self.gpiolog.debug('colour transition')
             if gpio == self.PIN_S2:
                 if level == 0:  # Clear -> Red.
                     self._cycle = 0
-                    logger.debug('clear->red')
+                    self.gpiolog.debug('clear->red')
                     return
                 else:  # Blue -> Green.
                     colour = 2
-                    logger.debug('blue->green')
+                    self.gpiolog.debug('blue->green')
             else:
                 if level == 0:  # Green -> Clear.
                     colour = 1
-                    logger.debug('green->clear')
+                    self.gpiolog.debug('green->clear')
                 else:  # Red -> Blue.
                     colour = 0
-                    logger.debug('red->blue')
+                    self.gpiolog.debug('red->blue')
 
             if self._cycle > 1:
                 self._cycle -= 1
                 td = pigpio.tickDiff(self._start_tick, self._last_tick)
                 self._hertz[colour] = (1000000 * self._cycle) / td
                 self._tally[colour] = self._cycle
-                logger.debug('updated hertz cycle(%s) td(%s) hertz(%s)(%s) tally(%s)(%s)',
+                self.gpiolog.debug('updated hertz cycle(%s) td(%s) hertz(%s)(%s) tally(%s)(%s)',
                              self._cycle, td, colour, self._hertz[colour], colour, self._tally[colour])
 
             else:
                 self._hertz[colour] = 0
                 self._tally[colour] = 0
-                logger.debug('reset hertz and tally')
+                self.gpiolog.debug('reset hertz and tally')
 
             self._cycle = 0
 
