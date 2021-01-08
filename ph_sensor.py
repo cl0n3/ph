@@ -46,12 +46,16 @@ class Chime:
 
 
 class Audio:
+    audioDir = './audio'
 
-    def __init__(self):
-        self.audioDir = HOME + '/audio'
+    def play(self, ph):
+        logging.debug(f'finding file {self.audioDir}/{ph}.mp3')
+        for filename in glob.glob(self.audioDir + '/*'):
+            if filename.lower() == f'{self.audioDir}/{ph}.mp3'.lower():
+                subprocess.run(["omxplayer", filename])
+                return
 
-    def play(self, filename):
-        subprocess.run(["omxplayer", f"{self.audioDir}/{filename}.MP3"])
+        logging.error(f'no audio file for {ph}')
 
 
 class Buttons(threading.Thread):
@@ -249,20 +253,8 @@ class Sensor(threading.Thread):
                 ph_found = pH
 
         logging.info('read Ph(%s) using datafile(%s) sample HZ(%s)', str(ph_found), file, str(sample))
-        audiofile = self.find_audio_file(ph_found)
-        if audiofile is not None:
-            subprocess.run(["omxplayer", audiofile])
-        else:
-            logging.error(f'no audio file for {ph_found}')
 
-    def find_audio_file(self, ph):
-        audioDir = HOME + '/audio'
-        logging.debug(f'finding file {audioDir}/{ph}.mp3')
-        for filename in glob.glob(audioDir + '/*'):
-            if filename.lower() == f'{audioDir}/{ph}.mp3'.lower():
-                return str(filename)
-
-        return None
+        return ph_found
 
     def get_hertz(self):
         return self.hertz[:]
