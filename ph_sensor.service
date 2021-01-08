@@ -1,13 +1,13 @@
 [Unit]
 Description=PH Sensor Service
-After=multi-user.target
-Conflicts=getty@tty1.service
+After=pigpiod.service
 
 [Service]
 Type=simple
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3.7 /home/pi/ph/ph_sensor.py
-StandardInput=tty-force
+User=pi
+Group=pi
 
 [Install]
 WantedBy=multi-user.target
